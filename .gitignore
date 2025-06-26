@@ -1,5 +1,6 @@
 .idea/
 *.gv
 *.pdf
+*.svg
 dump_host_20599_119
 local_test

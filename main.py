@@ -1,13 +1,12 @@
-import json
 import re
 from pathlib import Path
 
 from graph import make_graph
-from models import Value, Allocation, ValueDetailed
+from models import Value, Allocation, ValueDetailed, ModuleStats
 from parse_mlir import parse_mlir_line
 
-# dir = Path("/home/lukas/cosmoca/DISCO-DJ/vsc_scripts/scripts/data/dump_host_20599_119")
-dir = Path("local_test")
+dir = Path("/home/lukas/cosmoca/DISCO-DJ/vsc_scripts/scripts/data/dump_host_20599_119")
+# dir = Path("local_test")
 
 header_re = re.compile(
     r'^allocation\s+'
@@ -18,7 +17,7 @@ header_re = re.compile(
 value_re = re.compile(
     r'^\s*value:\s+'  # indent + “value: ”
     r'<(?P<id>\d+)\s+'  # “<737 ”
-    r'(?P<name>[^@>]+?)\s*'  # “all-to-all.5.1 ”
+    r'(?P<name>[^@>]+?)\s*?(?P<opt_name>\(\w+\))? '  # “all-to-all.5.1 ”
     r'@(?P<at>\d+)>'  # “@0>”
     r'\s*\(size=(?P<size>\d+),offset=(?P<offset>\d+)\):\s*'
     r'(?P<array_info>.+)$'  # “f32…”
@@ -28,7 +27,6 @@ used_header_re = re.compile(r'^Used values:')
 used_id_re = re.compile(r'^<(?P<id>\d+)\s+(?P<name>[^\s@]+) ?(?P<opt_name>\(\w+\))? @(?P<at>\d+)')
 
 
-
 def analyze_module(memory_report_file: Path):
     buffer_assignment_file = memory_report_file.parent / memory_report_file.name.replace("memory-usage-report",
                                                                                          "buffer-assignment")
@@ -36,17 +34,23 @@ def analyze_module(memory_report_file: Path):
         mode = "alloc"
         uses_mode = None
         current_used_id = None
-        value_name_to_id: dict[str, int] = {}
-        values: dict[int, Value] = {}
-        used_values: dict[int, ValueDetailed] = {}
-        allocations: dict[int, Allocation] = {}
+        module_stats = ModuleStats()
         for line in f:
             line = line.strip()
             if used_header_re.match(line):
                 mode = "used"
                 continue
             if line.startswith("HloLiveRange"):
-                mode = "HloLiveRange"
+                continue
+            if line.startswith("InstructionSequence"):
+                mode = "InstructionSequence"
+                continue
+            if line.startswith("BufferLiveRange"):
+                mode = "BufferLiveRange"
+                continue
+            if line.startswith("Live ranges at"):
+                mode = "LiveRangesPeak"
+                continue
             if mode == "alloc":
                 if line.startswith("allocation"):
                     m = header_re.search(line)
@@ -57,9 +61,7 @@ def analyze_module(memory_report_file: Path):
                         d[k] = int(d[k])
                     alloc_id = d["alloc_id"]
                     alloc = Allocation(**d)
-                    print(alloc)
-
-                    allocations[alloc_id] = alloc
+                    module_stats.allocations[alloc_id] = alloc
 
                 elif line.startswith("value"):
                     m = value_re.search(line)
@@ -70,10 +72,13 @@ def analyze_module(memory_report_file: Path):
                         d[k] = int(d[k])
                     d["allocation"] = alloc
                     value = Value(**d)
-                    values[value.id] = value
-                    if d["name"] in value_name_to_id:
+                    module_stats.values[value.id] = value
+                    if value.id in module_stats.value_id_to_name:
+                        raise ValueError("duplicate value id")
+                    module_stats.value_id_to_name[value.id] = value.name
+                    if value.name in module_stats.value_name_to_id:
                         raise ValueError("duplicate value name")
-                    value_name_to_id[value.name] = value.id
+                    module_stats.value_name_to_id[value.name] = value.id
             elif mode == "used":
                 m = used_id_re.search(line)
                 if m:
@@ -81,9 +86,9 @@ def analyze_module(memory_report_file: Path):
                     for k in ["id", "at"]:
                         d[k] = int(d[k])
                     value_uses = ValueDetailed(**d)
-                    values[value_uses.id].value_detailed = value_uses
+                    module_stats.values[value_uses.id].value_detailed = value_uses
                     current_used_id = value_uses.id
-                    used_values[current_used_id] = value_uses
+                    module_stats.used_values[current_used_id] = value_uses
                     continue
                 if line.startswith("positions"):
                     uses_mode = "positions"
@@ -95,26 +100,40 @@ def analyze_module(memory_report_file: Path):
                     instruction_raw = line.split(':', 1)[1].strip()
                     instruction = parse_mlir_line(instruction_raw)
 
-                    used_values[current_used_id].instruction = instruction
+                    module_stats.used_values[current_used_id].instruction = instruction
                     continue
                 if uses_mode == "positions":
-                    used_values[current_used_id].positions.append(line)
+                    module_stats.used_values[current_used_id].positions.append(line)
                     continue
                 if uses_mode == "uses":
-                    used_values[current_used_id].uses.append(line)
-            # elif mode == "HloLiveRange":
-            #     val,name=line.split(":")
-
-
-    print(used_values[24].model_dump_json(indent=2))
+                    module_stats.used_values[current_used_id].uses.append(line)
+            elif mode == "BufferLiveRange":
+                val, rangestr = line.split(":")
+                name = val.rstrip("{}")
+                range = tuple(map(int, rangestr.strip().split("-")))
+                try:
+                    value = module_stats.values[module_stats.value_name_to_id[name]]
+                except KeyError:
+                    value = module_stats.values[module_stats.value_name_to_id[val]]
+                value.live_range = range
+            elif mode == "InstructionSequence":
+                order_str, name = line.split(":")
+                order = int(order_str.strip())
+                try:
+                    value = module_stats.values[module_stats.value_name_to_id[name]]
+                except KeyError:
+                    continue
+                value.sequence = order
+    print(module_stats.values[24].model_dump_json(indent=2))
     # print(json.dumps(value_name_to_id, indent=2))
-    make_graph(values, value_name_to_id)
+    make_graph(module_stats)
+    # print_stats(module_stats)
 
 
 for file in sorted(dir.glob("*memory-usage-report.txt")):
     module_id = int(file.stem.split(".")[0].split("_")[1])
     module_name = file.stem.split(".")[1]
 
-    # if module_id == 447:
-    if module_id == 5:
+    if module_id == 447:
+    # if module_id == 5:
         analyze_module(file)
