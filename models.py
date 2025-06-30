@@ -1,6 +1,10 @@
+from collections import defaultdict
 from functools import cached_property
 from typing import Optional
 
+import numpy as np
+import scipy
+from matplotlib import pyplot as plt
 from pydantic import BaseModel
 
 from utils import pretty_byte_size
@@ -84,3 +88,30 @@ class ModuleStats(BaseModel):
             if v.sequence > l:
                 l = v.sequence
         return l
+
+    @cached_property
+    def size_over_time(self):
+        time_map = defaultdict(list)
+        for v in self.values.values():
+            if v.live_range is None:
+                continue
+            for i in range(v.live_range[0], v.live_range[1] + 1):
+                time_map[i].append(v)
+
+        time_map = {key: time_map[key] for key in sorted(time_map.keys())}
+        times = []
+        sizes = []
+        for t, values in time_map.items():
+            times.append(t)
+            sizes.append(sum(v.size for v in values))
+        return time_map, times, sizes
+
+    @cached_property
+    def allocation_peaks(self):
+        time_map, times, sizes = self.size_over_time
+        # plt.plot(times, sizes)
+        peaks, props = scipy.signal.find_peaks(sizes, prominence=np.max(sizes) / 5)
+        # for peak in peaks:
+        #     plt.scatter(times[peak], sizes[peak])
+
+        return np.array(times)[peaks]

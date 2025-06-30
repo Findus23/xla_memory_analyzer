@@ -12,7 +12,6 @@ def make_graph(module_stats: ModuleStats):
         if val.sequence is not None:
             cmap = plt.get_cmap("plasma")
             color = cmap(val.sequence / module_stats.largest_sequence_value)
-            print(to_hex(color))
         else:
             color = "green"
 

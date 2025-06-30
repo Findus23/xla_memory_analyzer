@@ -2,11 +2,13 @@ import re
 from pathlib import Path
 
 from graph import make_graph
+from memory_stats import print_stats, print_peak_stats
 from models import Value, Allocation, ValueDetailed, ModuleStats
 from parse_mlir import parse_mlir_line
 
-dir = Path("/home/lukas/cosmoca/DISCO-DJ/vsc_scripts/scripts/data/dump_host_20599_119")
+# dir = Path("/home/lukas/cosmoca/DISCO-DJ/vsc_scripts/scripts/data/dump_host_20599_119")
 # dir = Path("local_test")
+dir = Path("dump_host_20599_126")
 
 header_re = re.compile(
     r'^allocation\s+'
@@ -124,10 +126,10 @@ def analyze_module(memory_report_file: Path):
                 except KeyError:
                     continue
                 value.sequence = order
-    print(module_stats.values[24].model_dump_json(indent=2))
+    # print(module_stats.values[9].model_dump_json(indent=2))
     # print(json.dumps(value_name_to_id, indent=2))
     make_graph(module_stats)
-    # print_stats(module_stats)
+    print_peak_stats(module_stats)
 
 
 for file in sorted(dir.glob("*memory-usage-report.txt")):

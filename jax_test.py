@@ -3,9 +3,9 @@ from pathlib import Path
 
 import jax
 
-os.environ["XLA_FLAGS"] = "--xla_dump_to=local_test3 --xla_hlo_profile=true --xla_dump_hlo_as_text=true"
+os.environ["XLA_FLAGS"] = "--xla_dump_to=local_test"
 
-
+jax.profiler.start_trace("profiler_dir/")
 def test(input):
     bla = jax.numpy.sin(input)
     test = jax.numpy.cumsum(bla)
@@ -20,3 +20,4 @@ for file in Path("local_test3").glob("*"):
 
 comp=test.lower(input).compile()
 print(comp)
+jax.profiler.stop_trace()

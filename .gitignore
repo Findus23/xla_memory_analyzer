@@ -2,5 +2,7 @@
 *.gv
 *.pdf
 *.svg
-dump_host_20599_119
+*.html
+dump_host_*
 local_test
+profiler_*
