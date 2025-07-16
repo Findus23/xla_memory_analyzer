@@ -1,14 +1,29 @@
+#!/usr/bin/python
 import re
 from pathlib import Path
 
-from graph import make_graph
-from memory_stats import print_stats, print_peak_stats
-from models import Value, Allocation, ValueDetailed, ModuleStats
-from parse_mlir import parse_mlir_line
+from rich.console import Console
+
+from .memory_stats import print_peak_stats
+from .models import Value, Allocation, ValueDetailed, ModuleStats
+from .parse_mlir import parse_mlir_line
+from .utils import pretty_byte_size
 
 # dir = Path("/home/lukas/cosmoca/DISCO-DJ/vsc_scripts/scripts/data/dump_host_20599_119")
 # dir = Path("local_test")
-dir = Path("dump_host_20599_126")
+# dir = Path("dump_host_20599_126")
+# dir = Path("dump_host_27281_126")
+# dir = Path("dump_host_27475_126") # without =platform
+# dir = Path("dump_host_27712_126") # with TF_GPU_ALLOCATOR=cuda_malloc_async
+# dir = Path("/home/lukas/cosmoca/DISCO-DJ/scripts/data/dump_host_cpu_test")
+# dir=Path("/home/lukas/PycharmProjects/jax-tests/gradient_tests/repro/local_test")
+# dir=Path("dump_host_29297_22") # grad 1024
+# dir=Path("dump_host_29296_22") # grad 1024 unrolled
+# dir=Path("dump_host_29300_22") # grad 1024 unrolled with shardy
+# dir=Path("dump_host_29301_22") # grad 1024 unrolled with shardy bwd unsharded
+# dir=Path("dump_host_29302_22") # 2048 still on 16 nodes, oom
+# dir=Path("dump_host_29304_22") # 3072 on 32 nodes, oom, >200GB
+dir = Path("dump_host_29306_22")  # same, but only 1 nbody step
 
 header_re = re.compile(
     r'^allocation\s+'
@@ -36,7 +51,9 @@ def analyze_module(memory_report_file: Path):
         mode = "alloc"
         uses_mode = None
         current_used_id = None
-        module_stats = ModuleStats()
+        module_id = int(memory_report_file.stem.split(".")[0].split("_")[1])
+        module_name = memory_report_file.stem.split(".")[1]
+        module_stats = ModuleStats(name=module_name, id=module_id)
         for line in f:
             line = line.strip()
             if used_header_re.match(line):
@@ -126,16 +143,32 @@ def analyze_module(memory_report_file: Path):
                 except KeyError:
                     continue
                 value.sequence = order
-    # print(module_stats.values[9].model_dump_json(indent=2))
-    # print(json.dumps(value_name_to_id, indent=2))
-    make_graph(module_stats)
-    print_peak_stats(module_stats)
+    return module_stats
 
 
-for file in sorted(dir.glob("*memory-usage-report.txt")):
-    module_id = int(file.stem.split(".")[0].split("_")[1])
-    module_name = file.stem.split(".")[1]
+def main(dir: Path, interesting_modules: list[str], skip_small_modules: bool = True):
+    console = Console()
+    total_all_modules = 0
+    for file in sorted(dir.glob("*memory-usage-report.txt")):
+        module = analyze_module(file)
+        total_all_modules += module.total_allocation
 
-    if module_id == 447:
-    # if module_id == 5:
-        analyze_module(file)
+        if skip_small_modules and module.total_allocation < 1024 ** 2:  # 1GB
+            continue
+        skip = True
+        for name in interesting_modules:
+            if name in module.name:
+                skip = False
+                break
+        if skip:
+            continue
+        console.rule(f"{module.id} {module.name} ({pretty_byte_size(module.total_allocation)})")
+        # print(module.total_allocation, pretty_byte_size(module.total_allocation))
+        print_peak_stats(module)
+        # memory_buffer_over_time(module)
+        # vals_by_line_of_code(module)
+        # print(module_stats.values[9].model_dump_json(indent=2))
+        # print(json.dumps(value_name_to_id, indent=2))
+        # make_graph(module_stats)
+        # print_peak_stats(module)
+    console.rule(f"all modules: {total_all_modules}")

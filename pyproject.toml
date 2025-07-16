@@ -1,0 +1,27 @@
+[project]
+name = "xla-memory-analyzer"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "click>=8.2.1",
+    "matplotlib>=3.10.3",
+    "pydantic>=2.11.7",
+    "rich>=14.0.0",
+    "scipy>=1.16.0",
+]
+[project.scripts]
+xla_memory_analyzer = "xla_memory_analyzer:cli"
+
+[project.optional-dependencies]
+graph = [
+    "graphviz>=0.21",
+]
+debug = [
+    "pyqt6>=6.9.1",
+]
+
+[build-system]
+requires = ["hatchling >= 1.26"]
+build-backend = "hatchling.build"

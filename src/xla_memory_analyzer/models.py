@@ -7,7 +7,7 @@ import scipy
 from matplotlib import pyplot as plt
 from pydantic import BaseModel
 
-from utils import pretty_byte_size
+from .utils import pretty_byte_size
 
 large_array_threshold = 1024 ** 2  # 1MB
 
@@ -30,7 +30,7 @@ class ValueDetailed(BaseModel):
     def op_name(self):
         try:
             return self.instruction["metadata"]["op_name"]
-        except TypeError:
+        except (TypeError, KeyError):
             return None
 
     @property
@@ -65,14 +65,22 @@ class Value(BaseModel):
 
     @property
     def is_large_array(self) -> bool:
-        return self.size > large_array_threshold
+       return True
+        # return self.size > large_array_threshold
 
     @property
     def pretty_size(self) -> str:
         return pretty_byte_size(self.size)
 
+    @property
+    def array_info_without_order(self):
+        return self.array_info.split("{")[0]
+
+
 
 class ModuleStats(BaseModel):
+    name: str
+    id: int
     value_name_to_id: dict[str, int] = {}
     value_id_to_name: dict[int, str] = {}
     values: dict[int, Value] = {}
@@ -109,9 +117,18 @@ class ModuleStats(BaseModel):
     @cached_property
     def allocation_peaks(self):
         time_map, times, sizes = self.size_over_time
-        # plt.plot(times, sizes)
+        times = np.array(times)
+        # return  [times[np.argmax(sizes)]]
+        plt.plot(times, sizes)
         peaks, props = scipy.signal.find_peaks(sizes, prominence=np.max(sizes) / 5)
-        # for peak in peaks:
-        #     plt.scatter(times[peak], sizes[peak])
+        for peak in peaks:
+            plt.scatter(times[peak], sizes[peak])
+        plt.show()
+        if peaks.size == 0:
+            peaks = [times[np.argmax(sizes)]]
 
-        return np.array(times)[peaks]
+        return times[peaks]
+
+    @property
+    def total_allocation(self):
+        return sum(alloc.total_size for alloc in self.allocations.values())
