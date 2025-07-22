@@ -5,7 +5,7 @@ from pathlib import Path
 from rich.console import Console
 
 from .memory_stats import print_peak_stats
-from .models import Value, Allocation, ValueDetailed, ModuleStats
+from .models import Value, Allocation, ValueDetailed, ModuleStats, DumpDirectory
 from .parse_mlir import parse_mlir_line
 from .utils import pretty_byte_size
 
@@ -146,7 +146,24 @@ def analyze_module(memory_report_file: Path):
     return module_stats
 
 
-def main(dir: Path, interesting_modules: list[str], skip_small_modules: bool = True):
+def load_all_modules(dir: Path) -> DumpDirectory:
+    modules = []
+    total_all_modules = 0
+
+    for file in sorted(dir.glob("*memory-usage-report.txt")):
+        module = analyze_module(file)
+        total_all_modules += module.total_allocation
+        modules.append(module)
+
+    return DumpDirectory(directory=dir, modules=modules, total_size=total_all_modules)
+
+
+def main(
+        dir: Path,
+        interesting_modules: list[str],
+        skip_small_modules: bool = True,
+        only_main_peak: bool = False,
+):
     console = Console()
     total_all_modules = 0
     for file in sorted(dir.glob("*memory-usage-report.txt")):
@@ -164,7 +181,7 @@ def main(dir: Path, interesting_modules: list[str], skip_small_modules: bool = T
             continue
         console.rule(f"{module.id} {module.name} ({pretty_byte_size(module.total_allocation)})")
         # print(module.total_allocation, pretty_byte_size(module.total_allocation))
-        print_peak_stats(module)
+        print_peak_stats(module, only_main_peak)
         # memory_buffer_over_time(module)
         # vals_by_line_of_code(module)
         # print(module_stats.values[9].model_dump_json(indent=2))

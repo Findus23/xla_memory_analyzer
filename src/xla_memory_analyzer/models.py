@@ -1,5 +1,6 @@
 from collections import defaultdict
 from functools import cached_property
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -65,7 +66,7 @@ class Value(BaseModel):
 
     @property
     def is_large_array(self) -> bool:
-       return True
+        return True
         # return self.size > large_array_threshold
 
     @property
@@ -75,7 +76,6 @@ class Value(BaseModel):
     @property
     def array_info_without_order(self):
         return self.array_info.split("{")[0]
-
 
 
 class ModuleStats(BaseModel):
@@ -115,10 +115,15 @@ class ModuleStats(BaseModel):
         return time_map, times, sizes
 
     @cached_property
+    def main_allocation_peak(self):
+        time_map, times, sizes = self.size_over_time
+        times = np.array(times)
+        return times[np.argmax(sizes)]
+
+    @cached_property
     def allocation_peaks(self):
         time_map, times, sizes = self.size_over_time
         times = np.array(times)
-        # return  [times[np.argmax(sizes)]]
         plt.plot(times, sizes)
         peaks, props = scipy.signal.find_peaks(sizes, prominence=np.max(sizes) / 5)
         for peak in peaks:
@@ -132,3 +137,10 @@ class ModuleStats(BaseModel):
     @property
     def total_allocation(self):
         return sum(alloc.total_size for alloc in self.allocations.values())
+
+
+class DumpDirectory(BaseModel):
+    directory: Path
+    modules: list[ModuleStats]
+    total_size: int
+

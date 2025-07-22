@@ -20,7 +20,7 @@ def sourcefile_to_snippet(value: Value):
         if "DISCO-DJ" in source_file:
             rel_path = source_file.split("DISCO-DJ/")[-1]
             disc_path_local = Path("/home/lukas/cosmoca/DISCO-DJ")
-            #disc_path_local = Path("/home/lukas/cosmoca/DISCO-DJ/vsc_scripts/")
+            # disc_path_local = Path("/home/lukas/cosmoca/DISCO-DJ/vsc_scripts/")
             file = disc_path_local / rel_path
         else:
             print(f"{file} not found")
@@ -30,11 +30,12 @@ def sourcefile_to_snippet(value: Value):
     end_line = min(len(lines), source_line + 1)
     code = "".join(lines[start_line:end_line])
     syntax = Syntax(code, "python",
-                    dedent=True, line_numbers=True,indent_guides=True, word_wrap=True,
+                    dedent=True, line_numbers=True, indent_guides=True, word_wrap=True,
                     start_line=start_line + 1, highlight_lines={source_line})
     background_style = syntax._theme.get_background_style()
-    title=f"{value.pretty_size} | {value.name} | {value.array_info_without_order} "
-    panel=Panel(syntax,style=background_style,title=title,subtitle=value.value_detailed.short_source +" | "                +value.value_detailed.op_name)
+    title = f"{value.pretty_size} | {value.name} | {value.array_info_without_order} "
+    panel = Panel(syntax, style=background_style, title=title,
+                  subtitle=value.value_detailed.short_source + " | " + value.value_detailed.op_name)
     console = Console()
     console.print(panel)
 
@@ -78,12 +79,13 @@ def print_stats(module_stats: ModuleStats):
     print_memory_stats(ordered_values[:3])
 
 
-def print_peak_stats(module_stats: ModuleStats):
+def print_peak_stats(module_stats: ModuleStats, only_main_peak: bool = False):
     console = Console()
-    for peak in module_stats.allocation_peaks:
+    peaks = [module_stats.main_allocation_peak] if only_main_peak else module_stats.allocation_peaks
+    for peak in peaks:
         time_map = module_stats.size_over_time[0]
         values_at_peak = sorted(time_map[peak], key=lambda x: -x.size)
-        total_at_peak=sum(v.size for v in values_at_peak)
+        total_at_peak = sum(v.size for v in values_at_peak)
         console.rule(f"peak at {peak} totalling {pretty_byte_size(total_at_peak)}")
         print_memory_stats(values_at_peak)
 
@@ -130,7 +132,7 @@ def vals_by_line_of_code(module_stats: ModuleStats):
                       v.value_detailed.op_name,
                       v.value_detailed.short_source,
                       v.array_info_without_order)
-                print("alloc",v.allocation.alloc_id, pretty_byte_size(v.size), pretty_byte_size(v.offset),
+                print("alloc", v.allocation.alloc_id, pretty_byte_size(v.size), pretty_byte_size(v.offset),
                       pretty_byte_size(v.allocation.total_size))
 
                 sourcefile_to_snippet(v)

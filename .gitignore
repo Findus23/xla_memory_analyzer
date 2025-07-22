@@ -6,3 +6,6 @@
 dump_host_*
 local_test
 profiler_*
+*.egg-info
+*.txt
+*.out
