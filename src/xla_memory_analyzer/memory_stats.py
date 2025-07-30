@@ -18,7 +18,12 @@ def sourcefile_to_snippet(value: Value):
     file = Path(source_file)
     if not file.exists():
         if "DISCO-DJ" in source_file:
-            rel_path = source_file.split("DISCO-DJ/")[-1]
+            rel_path = Path(source_file.split("DISCO-DJ/")[-1])
+            if "__editable__" in str(source_file):
+                parts = rel_path.parts
+                start_index = parts.index("discodj")
+                rel_path = Path("src") / Path(*parts[start_index:])
+
             disc_path_local = Path("/home/lukas/cosmoca/DISCO-DJ")
             # disc_path_local = Path("/home/lukas/cosmoca/DISCO-DJ/vsc_scripts/")
             file = disc_path_local / rel_path
